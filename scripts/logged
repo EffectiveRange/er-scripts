@@ -1,0 +1,8 @@
+#!/bin/bash
+CURRDATE=$(date +%Y%m%d_%H%M%S.%N)
+LOGDIR=/var/log/effective-range/shell
+LOGFILE=$LOGDIR/logged_$CURRDATE.log
+sudo mkdir -p $LOGDIR
+echo "executing $@  at $CURRDATE" | sudo tee $LOGFILE
+exec "$@" 2>&1 | sudo tee -a $LOGFILE
+

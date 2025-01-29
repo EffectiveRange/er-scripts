@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "Usage: $0 <pid>"
+    exit 1
+fi
+gdb --quiet --pid $1 -iex "set pagination off" -iex "set print frame-arguments all" -iex "set print static off" -iex "print pretty on" -ex "thread apply all bt" -ex detach -ex quit
