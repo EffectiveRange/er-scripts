@@ -22,9 +22,9 @@ on:
 
 jobs:
  call_ci:
-  uses: EffectiveRange/ci-workflows/.github/workflows/cmake-ci.yaml@v1
+  uses: EffectiveRange/ci-workflows/.github/workflows/cmake-ci.yaml@v3
   with:
-    build-arch: '["armhf","amd64","arm64"]'
+    build-version: '["armhf-bookworm", "amd64-bookworm","armhf-bullseye", "amd64-bullseye","arm64-bookworm","arm64-bullseye"]'
     run-sanitizers: false
     run-coverage: false
   secrets: 
