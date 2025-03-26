@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -x
+
+sudo picprogrammer -i
+sudo picprogrammer -f /opt/effective-range/fw/fw-mrhat-1.0.9-production.hex --hex -w
+
+upower -i /org/freedesktop/UPower/devices/battery_bq2562x_battery
+upower -i /org/freedesktop/UPower/devices/line_power_bq2562x_charger
+
+sudo hwclock -r
+
+python3 /usr/local/bin/buzzer.py 440 50 &
+sleep 5
+kill %1
