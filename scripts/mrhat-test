@@ -1,15 +1,121 @@
 #!/bin/bash
 
-set -x
+#######################################################################################
+#                                  MrHat Test Script                                  #
+#######################################################################################
 
-sudo picprogrammer -i
-sudo picprogrammer -f /opt/effective-range/fw/fw-mrhat-1.0.9-production.hex --hex -w
+echo "================================= PIC MCU TEST ================================="
 
-upower -i /org/freedesktop/UPower/devices/battery_bq2562x_battery
-upower -i /org/freedesktop/UPower/devices/line_power_bq2562x_charger
+# Stop pigpiod service if it is running
+sudo systemctl stop pigpiod.service
 
-sudo hwclock -r
+# Wait until the service is stopped
+while sudo systemctl is-active --quiet pigpiod.service; do
+    sleep 1
+done
 
+# Check the PIC microcontroller on the MrHat board
+mcu_info=$(sudo picprogrammer -i)
+echo "$mcu_info"
+
+echo "================================= BQ25622 TEST ================================="
+
+# Check the I2C bus for the BQ2562X battery charger
+charger_info=$(upower -i /org/freedesktop/UPower/devices/line_power_bq2562x_charger)
+echo "$charger_info"
+
+echo "================================= Battery TEST ================================="
+
+# Check the I2C bus for the BQ2562X managed battery
+battery_info=$(upower -i /org/freedesktop/UPower/devices/battery_bq2562x_battery)
+echo "$battery_info"
+
+echo "=================================== RTC TEST ==================================="
+
+sudo hwclock -w
+date_time=$(date -u +"%Y-%m-%d %H:%M:%S.%6N%:z")  # Get current time in UTC
+echo "SYS: $date_time"
+hwclock_time=$(sudo TZ=UTC hwclock -r)  # Read the hardware clock
+echo "RTC: $hwclock_time"
+
+# Convert to epoch time (microseconds)
+
+hwclock_epoch=$(date -d "$hwclock_time" +"%s%6N")
+date_epoch=$(date -d "$date_time" +"%s%6N")
+
+# Calculate time difference
+time_diff=$(( hwclock_epoch - date_epoch ))
+
+# Get absolute difference (handle negative values)
+if [ $time_diff -lt 0 ]; then
+    time_diff=$(( -time_diff ))
+fi
+
+# Check if difference is greater than 1 seconds
+
+echo "================================= Buzzer TEST =================================="
+
+# Start buzzer.py in the background
 python3 /usr/local/bin/buzzer.py 440 50 &
-sleep 5
-kill %1
+buzzer_pid=$!  # Capture the PID
+
+sleep 4  # Allow buzzer to run for 4 seconds
+
+# Kill the process
+kill $buzzer_pid
+wait $buzzer_pid 2>/dev/null
+exit_status=$?
+
+if [ $exit_status -gt 128 ]; then
+    exit_status=$((exit_status - 128))
+fi
+
+echo "Buzzer exit status: $exit_status"
+
+echo "================================= TEST Results ================================="
+
+failures=0
+
+if [[ $mcu_info == *"PIC18F16Q20"* ]]; then
+    echo "PIC MCU: OK"
+else
+    echo "PIC MCU: FAIL"
+    failures=$((failures + 1))
+fi
+
+if [[ $charger_info == *"online:              yes"* ]]; then
+    echo "BQ25622: OK"
+else
+    echo "BQ25622: FAIL"
+    failures=$((failures + 1))
+fi
+
+if [[ $battery_info == *"present:             yes"* ]]; then
+    echo "Battery: OK"
+else
+    echo "Battery: FAIL"
+    failures=$((failures + 1))
+fi
+
+if [ $time_diff -le 100000 ]; then
+    echo "RTC:     OK"
+else
+    echo "RTC:     FAIL"
+    echo "Time difference: $time_diff microseconds" 1>&2
+    failures=$((failures + 1))
+fi
+
+if [ $exit_status -eq 0 ]; then
+    echo "Buzzer:  OK"
+elif [ $exit_status -eq 15 ]; then
+    echo "Buzzer:  OK"
+else
+    echo "Buzzer:  FAIL"
+    failures=$((failures + 1))
+fi
+
+if [ $failures -eq 0 ]; then
+    echo "All tests passed!"
+else
+    echo "$failures test(s) failed."
+fi
