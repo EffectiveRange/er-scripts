@@ -1,0 +1,44 @@
+#!/bin/bash
+set -e -o pipefail
+file_path="$1"
+
+if [ -z "$file_path" ]; then
+    echo "Usage: $0 <file_path> [timeout]" >&2
+    exit 1
+fi
+
+PIPE=$(mktemp -u /tmp/inotify_pipe.XXXXXX)
+mkfifo "$PIPE"
+cleanup() {
+    rm -f "$PIPE"
+}
+trap cleanup EXIT
+
+file_name=$(basename "$file_path")
+if [ -z "$2" ];then
+    TIMEOUT=10
+else
+    TIMEOUT=$2
+fi
+echo "timeout is $TIMEOUT seconds" >&2
+inotifywait --timeout $TIMEOUT -m -e create -e moved_to $(dirname "$file_path") -o "$PIPE" -q &
+INOTIFY_PID=$!
+TIMED_OUT=TRUE
+while read -r dir action file  < "$PIPE"; do
+    if [ "$file" == "$file_name" ]; then
+        echo "File $file_name created in $(dirname "$file_path")" >&2
+        TIMED_OUT=FALSE
+        break
+    fi
+done
+if [ "$TIMED_OUT" == "FALSE" ]; then
+    kill $INOTIFY_PID || true
+    wait $INOTIFY_PID || true
+fi
+if [ "$TIMED_OUT" == "TRUE" ]; then
+    echo "Timed out waiting for $file_name to be created in $(dirname "$file_path")" >&2
+    exit 1
+fi
+echo $(basename $(readlink -f "$file_path"))
+cat "$file_path"
+exit 0
