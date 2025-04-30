@@ -10,6 +10,7 @@ fi
 PIPE=$(mktemp -u /tmp/inotify_pipe.XXXXXX)
 mkfifo "$PIPE"
 cleanup() {
+    echo "Cleaning up pipe $PIPE" >&2
     rm -f "$PIPE"
 }
 trap cleanup EXIT
@@ -24,10 +25,12 @@ echo "timeout is $TIMEOUT seconds" >&2
 inotifywait --timeout $TIMEOUT -m -e create -e moved_to $(dirname "$file_path") -o "$PIPE" -q &
 INOTIFY_PID=$!
 TIMED_OUT=TRUE
+EXECUTED=FALSE
 while read -r dir action file  < "$PIPE"; do
     if [ "$file" == "$file_name" ]; then
         echo "File $file_name created in $(dirname "$file_path")" >&2
         TIMED_OUT=FALSE
+        EXECUTED=TRUE
         break
     fi
 done
@@ -37,6 +40,10 @@ if [ "$TIMED_OUT" == "FALSE" ]; then
 fi
 if [ "$TIMED_OUT" == "TRUE" ]; then
     echo "Timed out waiting for $file_name to be created in $(dirname "$file_path")" >&2
+    # signal retry to client
+    if [ "$EXECUTED" == "FALSE" ]; then
+        exit 169
+    fi
     exit 1
 fi
 echo $(basename $(readlink -f "$file_path"))
