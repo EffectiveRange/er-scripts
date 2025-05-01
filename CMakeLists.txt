@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 include(ERBuild NO_POLICY_SCOPE)
 
 
-set(er-scripts-ver 1.3.5)
+set(er-scripts-ver 1.3.6)
 
 project(er-scripts VERSION ${er-scripts-ver} DESCRIPTION "This project contains various script utilities")
 

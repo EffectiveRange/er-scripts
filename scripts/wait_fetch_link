@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+set -x -e -o pipefail
 file_path="$1"
 
 if [ -z "$file_path" ]; then
@@ -9,11 +9,7 @@ fi
 
 PIPE=$(mktemp -u /tmp/inotify_pipe.XXXXXX)
 mkfifo "$PIPE"
-cleanup() {
-    echo "Cleaning up pipe $PIPE" >&2
-    rm -f "$PIPE"
-}
-trap cleanup EXIT
+
 
 file_name=$(basename "$file_path")
 if [ -z "$2" ];then
@@ -24,6 +20,17 @@ fi
 echo "timeout is $TIMEOUT seconds" >&2
 inotifywait --timeout $TIMEOUT -m -e create -e moved_to $(dirname "$file_path") -o "$PIPE" -q &
 INOTIFY_PID=$!
+cleanup() {
+    echo "Cleaning up inotify pid $INOTIFY_PID" >&2
+    kill $INOTIFY_PID || true
+    wait $INOTIFY_PID || true
+    echo "Cleaning up pipe $PIPE" >&2
+    rm -f "$PIPE"
+}
+trap cleanup EXIT  
+trap cleanup TERM 
+trap cleanup INT
+
 TIMED_OUT=TRUE
 EXECUTED=FALSE
 while read -r dir action file  < "$PIPE"; do
@@ -34,10 +41,6 @@ while read -r dir action file  < "$PIPE"; do
         break
     fi
 done
-if [ "$TIMED_OUT" == "FALSE" ]; then
-    kill $INOTIFY_PID || true
-    wait $INOTIFY_PID || true
-fi
 if [ "$TIMED_OUT" == "TRUE" ]; then
     echo "Timed out waiting for $file_name to be created in $(dirname "$file_path")" >&2
     # signal retry to client
